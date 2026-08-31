@@ -1,0 +1,10 @@
+# backend
+washmycup-backend/venv/
+washmycup-backend/.env
+washmycup-backend/db.sqlite3
+washmycup-backend/media/
+washmycup-backend/__pycache__/
+
+# frontend
+washmycup-app/node_modules/
+washmycup-app/.env
