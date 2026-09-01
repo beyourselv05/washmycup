@@ -19,11 +19,12 @@ import { ReviewItem } from '@/components/review-item';
 import { Brand, Spacing } from '@/constants/theme';
 import type { ReliabilityReport, WashLocationDetail } from '@/types';
 
+// 백엔드 Location.Status와 같은 값이다. 문구는 앱에서 읽기 좋게 다듬었다.
 const STATUS_LABELS: Record<string, string> = {
-  confirmed: '✅ 확인된 위치',
-  unconfirmed: '⚠️ 아직 확인되지 않은 위치',
-  reviewing: '🔍 신고 접수로 검토 중',
-  removed: '삭제된 위치',
+  confirmed: '✅ 운영진이 확인한 위치',
+  unconfirmed: '⚠️ 운영진 확인 전',
+  reviewing: '🔍 신고가 접수되어 검토 중',
+  removed: '숨김 처리된 위치',
 };
 
 export default function LocationDetailScreen() {
@@ -177,10 +178,12 @@ export default function LocationDetailScreen() {
       )}
 
       <View style={styles.section}>
+        <Text style={styles.status}>{STATUS_LABELS[location.status] ?? location.status}</Text>
         <Text style={styles.buildingName}>{location.building_name}</Text>
         {location.address.length > 0 && <Text style={styles.address}>{location.address}</Text>}
-        <Text style={styles.status}>{STATUS_LABELS[location.status] ?? location.status}</Text>
-        <Text style={styles.detailText}>{location.detail_text}</Text>
+        {location.detail_text.length > 0 && (
+          <Text style={styles.detailText}>{location.detail_text}</Text>
+        )}
         <Text style={styles.counts}>
           👍 {location.up_count} · 👎 {location.down_count}
         </Text>
@@ -233,8 +236,8 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.two },
   buildingName: { fontSize: 24, fontWeight: '800', color: '#111827' },
   address: { fontSize: 13, color: Brand.muted, lineHeight: 18, marginTop: -4 },
-  status: { fontSize: 14, fontWeight: '600', color: Brand.muted },
-  detailText: { fontSize: 16, lineHeight: 24, color: '#374151' },
+  status: { fontSize: 14, fontWeight: '600', color: Brand.muted, marginBottom: -4 },
+  detailText: { fontSize: 16, lineHeight: 24, fontWeight: '600', color: '#111827', marginVertical: Spacing.one },
   counts: { fontSize: 15, color: '#374151', fontWeight: '600' },
   actions: { flexDirection: 'row', gap: Spacing.two },
   actionButton: { flex: 1 },

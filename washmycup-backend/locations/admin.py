@@ -27,6 +27,13 @@ class LocationAdmin(admin.ModelAdmin):
     inlines = [ReviewInline, ReportInline]
     actions = ['mark_removed', 'mark_confirmed']
 
+    def get_changeform_initial_data(self, request):
+        # Admin에서 새로 넣는 위치는 운영진이 직접 확인한 것이므로 출처와 상태를 미리 맞춰둔다.
+        return {
+            'source': Location.Source.ADMIN,
+            'status': Location.Status.CONFIRMED,
+        }
+
     @admin.display(description='리뷰 (👍/👎)')
     def review_summary(self, obj):
         up = obj.reviews.filter(type=Review.Type.UP).count()

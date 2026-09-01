@@ -16,11 +16,43 @@ import type { WashLocation } from '@/types';
  */
 const MAX_MARKERS = 120;
 
-/** 마커 색: 확인된 곳은 파란색, 사용자 등록은 초록색, 신고로 검토중이면 주황색. */
+/**
+ * 마커를 그리는 순서(겹칠 때 누가 위로 오는지).
+ *
+ * 목록이 최신순이라 그냥 두면 방금 등록한 위치가 제일 먼저 그려져 오래된 마커에 덮인다.
+ * 아직 확인 안 된 곳일수록 눈에 띄어야 하므로 위로 올린다.
+ */
+function markerZIndex(location: WashLocation): number {
+  if (location.status === 'unconfirmed' || location.status === 'reviewing') return 2;
+  if (location.source === 'user') return 1;
+  return 0;
+}
+
+/**
+ * 마커 색 규칙.
+ * 아직 믿고 갈 수 없는 곳(미확인·신고 검토중)은 먼저 노랑으로 걸러내고,
+ * 확인이 끝난 곳만 출처에 따라 파랑(공식)/초록(사용자 등록)으로 나눈다.
+ */
 function markerColor(location: WashLocation): string {
-  if (location.status === 'reviewing') return MarkerColors.reviewing;
+  if (location.status === 'unconfirmed' || location.status === 'reviewing') {
+    return MarkerColors.reviewing;
+  }
   if (location.source === 'user') return MarkerColors.user;
-  return MarkerColors.confirmed;
+  return MarkerColors.official;
+}
+
+/**
+ * 마커 말풍선에 넣을 한 줄 설명.
+ *
+ * iOS 기본 말풍선은 설명을 한 줄로 잘라내기 때문에, 줄바꿈을 쓰면 뒷부분이 통째로 가려진다.
+ * 그래서 여러 줄을 ' · '로 펴서 잇고, 지도에서 더 중요한 상세 안내('임직원 전용' 등)를
+ * 주소보다 앞에 둔다. 주소 전문은 상세 화면에서 볼 수 있다.
+ */
+function calloutText(location: WashLocation): string {
+  return [...location.detail_text.split('\n'), location.address]
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /** 지금 화면에 보이는 범위의 마커만, 화면 중심에 가까운 것부터 추린다. */
@@ -106,8 +138,9 @@ export default function MapScreen() {
             key={location.id}
             coordinate={{ latitude: location.lat, longitude: location.lng }}
             pinColor={markerColor(location)}
+            zIndex={markerZIndex(location)}
             title={`${location.status === 'unconfirmed' ? '⚠️ ' : ''}${location.building_name}`}
-            description={location.address || location.detail_text}
+            description={calloutText(location)}
             onCalloutPress={() => router.push(`/location/${location.id}`)}
           />
         ))}
@@ -144,9 +177,9 @@ export default function MapScreen() {
 
       <SafeAreaView style={styles.footer} pointerEvents="box-none" edges={['bottom']}>
         <View style={styles.legend}>
-          <LegendDot color={MarkerColors.confirmed} label="확인됨" />
-          <LegendDot color={MarkerColors.reviewing} label="검토중" />
+          <LegendDot color={MarkerColors.official} label="공식 등록" />
           <LegendDot color={MarkerColors.user} label="사용자 등록" />
+          <LegendDot color={MarkerColors.reviewing} label="검토중" />
         </View>
 
         <Pressable

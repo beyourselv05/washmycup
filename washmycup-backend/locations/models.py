@@ -6,13 +6,15 @@ class Location(models.Model):
 
     class Source(models.TextChoices):
         STARBUCKS = 'starbucks', '스타벅스'
+        ADMIN = 'admin', '운영진 등록'
         USER = 'user', '사용자 등록'
 
     class Status(models.TextChoices):
-        CONFIRMED = 'confirmed', '확인됨'
-        UNCONFIRMED = 'unconfirmed', '미확인'
-        REVIEWING = 'reviewing', '검토중'
-        REMOVED = 'removed', '삭제됨'
+        CONFIRMED = 'confirmed', '위치 확인됨'
+        UNCONFIRMED = 'unconfirmed', '운영진 확인 전'
+        REVIEWING = 'reviewing', '신고 검토중'
+        # 소프트 삭제. 행은 남고 목록 API에서만 빠진다. (진짜 지우려면 Admin의 삭제 버튼)
+        REMOVED = 'removed', '숨김 처리 (앱 비노출)'
 
     lat = models.FloatField('위도')
     lng = models.FloatField('경도')
@@ -21,7 +23,11 @@ class Location(models.Model):
     photo = models.ImageField('사진', upload_to='locations/%Y/%m', blank=True, null=True)
     detail_text = models.TextField('상세 위치 설명', blank=True)
     source = models.CharField('출처', max_length=20, choices=Source.choices, default=Source.USER)
-    status = models.CharField('상태', max_length=20, choices=Status.choices, default=Status.UNCONFIRMED)
+    status = models.CharField(
+        '상태', max_length=20, choices=Status.choices, default=Status.UNCONFIRMED,
+        help_text='"숨김 처리"는 앱에서만 감추고 데이터는 남깁니다. '
+                  '아래 삭제 버튼은 리뷰·신고까지 영구 삭제하니 주의하세요.',
+    )
     created_at = models.DateTimeField('등록일시', auto_now_add=True)
 
     class Meta:

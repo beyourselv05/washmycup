@@ -19,7 +19,12 @@ logger = logging.getLogger(__name__)
 # SDK가 매 호출마다 남기는 안내 로그를 줄여 개발 서버 콘솔을 깨끗하게 유지한다.
 logging.getLogger('google_genai.models').setLevel(logging.ERROR)
 
-CACHE_TTL_SECONDS = 60 * 10
+# 리뷰가 바뀌면 캐시 키 자체가 바뀌므로 오래 두어도 낡은 요약이 나오지 않는다.
+# 무료 한도(하루 단위)를 아끼려면 길수록 좋다.
+CACHE_TTL_SECONDS = 60 * 60 * 24 * 7
+
+# 호출 실패로 만든 폴백은 짧게만 담아둔다. 곧 다시 시도하게 만들기 위해서다.
+FALLBACK_CACHE_TTL_SECONDS = 60
 
 PROMPT_TEMPLATE = """너는 텀블러 세척기 정보를 정리해주는 도우미야.
 
@@ -113,13 +118,20 @@ def build_reliability_report(location, use_cache=True):
             return cached
 
     if not reviews or not settings.GEMINI_API_KEY:
+        # 리뷰가 없거나 키가 없는 건 상태가 바뀌기 전까지 결과가 같으므로 그대로 캐시한다.
         report = _fallback_report(reviews)
-    else:
-        try:
-            report = _call_gemini(location, reviews)
-        except Exception:
-            logger.exception('Gemini 신뢰도 요약 실패 (location=%s)', location.id)
-            report = _fallback_report(reviews)
+        cache.set(cache_key, report, CACHE_TTL_SECONDS)
+        return report
+
+    try:
+        report = _call_gemini(location, reviews)
+    except Exception:
+        # 한도 초과·일시적 장애로 실패한 경우다. 이 결과를 오래 캐시해두면
+        # 한도가 풀린 뒤에도 계속 폴백만 나오므로 짧게만 담아둔다.
+        logger.exception('Gemini 신뢰도 요약 실패 (location=%s)', location.id)
+        report = _fallback_report(reviews)
+        cache.set(cache_key, report, FALLBACK_CACHE_TTL_SECONDS)
+        return report
 
     cache.set(cache_key, report, CACHE_TTL_SECONDS)
     return report

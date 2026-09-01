@@ -12,8 +12,8 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-dev-only-key")
 
 # Gemini API (리뷰 요약용). 없으면 규칙 기반 폴백으로 동작한다.
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-# gemini-2.5-flash는 신규 키로 호출이 막혀 후속 모델인 3.6-flash를 쓴다.
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+# 무료 한도는 모델별로 따로 잡힌다. flash-lite 계열이 한도가 넉넉해 시연에 안전하다.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -134,6 +134,19 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
     ],
+}
+
+
+# 캐시
+# AI 신뢰도 요약은 Gemini 무료 한도를 쓰므로 결과를 파일에 저장해 재사용한다.
+# 기본값인 메모리 캐시는 서버를 재시작할 때마다 비어서 같은 요약을 또 호출하게 된다.
+# 캐시 키에 리뷰 수와 최신 리뷰 id가 들어가므로, 리뷰가 바뀌면 알아서 다시 계산된다.
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': BASE_DIR / '.cache',
+    }
 }
 
 

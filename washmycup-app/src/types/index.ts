@@ -1,6 +1,6 @@
 /** 백엔드(Django/DRF) 응답과 필드명을 그대로 맞춘 타입 (snake_case). */
 
-export type LocationSource = 'starbucks' | 'user';
+export type LocationSource = 'starbucks' | 'admin' | 'user';
 
 export type LocationStatus = 'confirmed' | 'unconfirmed' | 'reviewing' | 'removed';
 
