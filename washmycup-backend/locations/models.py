@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class Location(models.Model):
@@ -80,3 +81,30 @@ class Report(models.Model):
 
     def __str__(self):
         return f'[{self.get_status_display()}] {self.location.building_name}'
+
+
+class Usage(models.Model):
+    """'여기서 씻었어요' 기록 한 건.
+
+    로그인이 없는 프로토타입이라 사용자 구분 없이 쌓는다. 이 앱을 쓰는 사람이
+    한 명이라는 전제이고, 계정이 붙으면 여기에 user 필드가 추가될 자리다.
+
+    개인 리포트(GET /api/me/report/)의 원재료가 된다.
+    """
+
+    location = models.ForeignKey(Location, related_name='usages', on_delete=models.CASCADE)
+    # 시드로 과거 기록을 넣어야 해서 실제 사용 시각과 기록이 남은 시각을 따로 둔다.
+    used_at = models.DateTimeField('사용일시', default=timezone.now)
+    # 어떤 상황에서 썼는지. 고정 선택지 대신 자유 입력으로 둔다.
+    # 맥락은 사람마다 너무 달라서 목록을 정해두면 대부분 '기타'로 몰리고,
+    # 목록에 없는 상황은 아예 기록을 포기하게 된다.
+    note = models.CharField('상황', max_length=40, blank=True)
+    created_at = models.DateTimeField('기록일시', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '사용 기록'
+        verbose_name_plural = '사용 기록'
+        ordering = ['-used_at']
+
+    def __str__(self):
+        return f'{self.location.building_name} @ {timezone.localtime(self.used_at):%Y-%m-%d %H:%M}'

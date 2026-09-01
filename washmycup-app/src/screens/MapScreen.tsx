@@ -147,9 +147,18 @@ export default function MapScreen() {
       </MapView>
 
       <SafeAreaView style={styles.overlay} pointerEvents="box-none" edges={['top']}>
-        <View style={styles.header} pointerEvents="none">
-          <Text style={styles.title}>CupPit</Text>
-          <Text style={styles.subtitle}>가까운 텀블러 세척기를 찾아보세요</Text>
+        <View style={styles.header}>
+          <View pointerEvents="none">
+            <Text style={styles.title}>CupPit</Text>
+            <Text style={styles.subtitle}>가까운 텀블러 세척기를 찾아보세요</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="내 텀블러 기록"
+            onPress={() => router.push('/my-report')}
+            style={({ pressed }) => [styles.reportButton, pressed && styles.reportButtonPressed]}>
+            <Text style={styles.reportButtonText}>내 기록</Text>
+          </Pressable>
         </View>
 
         {isMock && (
@@ -214,6 +223,10 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
     backgroundColor: 'rgba(255,255,255,0.94)',
     borderRadius: 16,
     paddingHorizontal: Spacing.three,
@@ -228,6 +241,14 @@ const styles = StyleSheet.create({
       android: { elevation: 4 },
     }),
   },
+  reportButton: {
+    backgroundColor: Brand.primarySoft,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  reportButtonPressed: { opacity: 0.7 },
+  reportButtonText: { fontSize: 13, fontWeight: '800', color: Brand.primaryDark },
   title: { fontSize: 24, fontWeight: '800', color: Brand.primary },
   subtitle: { fontSize: 13, color: Brand.muted, marginTop: 2 },
   banner: {

@@ -2,6 +2,7 @@
 
     python manage.py seed_locations
     python manage.py seed_locations --with-reviews   # AI 신뢰도 시연용 리뷰까지
+    python manage.py seed_locations --with-usages    # 개인 리포트 시연용 사용 기록까지
     python manage.py seed_locations --reset          # 기존 시드 데이터를 지우고 다시 넣기
 
 같은 이름이 이미 있으면 건너뛰므로 여러 번 실행해도 중복 등록되지 않는다.
@@ -24,11 +25,14 @@
 """
 
 import json
+import random
+from datetime import datetime, time, timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
-from locations.models import Location, Review
+from locations.models import Location, Review, Usage
 
 LOCAL_SEED_FILE = settings.BASE_DIR / 'seed_data_local.json'
 
@@ -293,12 +297,68 @@ SEED_REVIEWS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# 개인 리포트(#4) 시연용 사용 기록
+#
+# 리포트의 통계는 실제 Usage 행에서 계산되므로, 보여줄 패턴이 있으려면 기록도
+# 있어야 한다. 아래 가중치로 최근 8주치를 만들어 넣는다.
+# 평일 점심에 학교 건물을 자주 쓰는 사람을 상정했다.
+# ---------------------------------------------------------------------------
+
+# 장소별 상대 빈도. 자주 가는 곳이 뚜렷해야 리포트가 할 말이 생긴다.
+SEED_USAGE_WEIGHTS = {
+    '고려대학교 우정정보관': 14,
+    '고려대학교 현대자동차 경영관': 9,
+    '스타벅스 강남대로점': 6,
+    '고려대학교 아산이학관': 5,
+    '강남구청': 3,
+    '숙명여대 정문': 2,
+    '스타벅스 홍대입구역사거리R점': 2,
+    'LG서울역빌딩': 1,
+}
+
+# 요일 가중치 (월~일). 주말에는 확 줄어드는 평일 생활 패턴.
+SEED_USAGE_WEEKDAY_WEIGHTS = (5, 5, 7, 6, 4, 1, 1)
+
+# 시간대 가중치. (시작시각, 끝시각, 가중치) — 점심시간에 몰린다.
+SEED_USAGE_HOUR_WEIGHTS = (
+    (8, 11, 3),
+    (11, 14, 8),
+    (14, 18, 4),
+    (18, 21, 2),
+)
+
+# 사용자가 직접 적는 '상황' 예시. 고정 선택지가 아니라 자유 입력이라,
+# 한 사람이 자기 말투를 반복해서 쓰는 모습을 흉내낸다.
+# 빈 문자열이 섞여 있는 건 매번 적지는 않기 때문이다. 그게 실제 사용에 가깝다.
+SEED_USAGE_NOTES = (
+    ('', 5),
+    ('점심 먹고', 4),
+    ('수업 끝나고', 3),
+    ('카페에서 공부하다가', 3),
+    ('출근길에', 2),
+    ('운동 가기 전', 1),
+    ('친구와 약속 전에', 1),
+)
+
+SEED_USAGE_WEEKS = 8
+SEED_USAGE_PER_WEEK = (4, 7)
+
+# 실행할 때마다 기록이 달라지면 팀원끼리 화면이 서로 달라진다. 고정 시드를 쓴다.
+SEED_USAGE_RANDOM_SEED = 20260902
+
+
 class Command(BaseCommand):
     help = '데모용 세척기 위치(및 리뷰) 시드 데이터를 생성합니다.'
 
     def add_arguments(self, parser):
         parser.add_argument('--with-reviews', action='store_true', help='AI 신뢰도 시연용 리뷰도 함께 생성')
-        parser.add_argument('--reset', action='store_true', help='같은 이름의 기존 시드 위치를 삭제하고 다시 생성')
+        parser.add_argument('--with-usages', action='store_true', help='개인 리포트 시연용 사용 기록도 함께 생성')
+        parser.add_argument('--reset-usages', action='store_true', help='사용 기록만 지우고 다시 생성')
+        # --reset은 위치를 지웠다 다시 만든다. 위치에 딸린 리뷰·신고·사용 기록까지
+        # 함께 사라지므로, 사용 기록만 다시 만들려면 --reset-usages를 쓸 것.
+        parser.add_argument('--reset', action='store_true',
+                            help='같은 이름의 기존 시드 위치를 삭제하고 다시 생성 (딸린 리뷰·신고·사용 기록도 함께 삭제)')
 
     def handle(self, *args, **options):
         entries, reviews = self.build_seed_data()
@@ -332,10 +392,82 @@ class Command(BaseCommand):
                 for review in reviews.get(entry['building_name'], []):
                     Review.objects.create(location=location, **review)
 
+        if options['with_usages']:
+            self.seed_usages(reset=options['reset'] or options['reset_usages'])
+
         self.stdout.write(self.style.SUCCESS(
             f'시드 완료: 신규 {created_count}개 / 중복 건너뜀 {skipped_count}개 / '
             f'전체 {Location.objects.count()}개'
         ))
+
+    def seed_usages(self, reset=False):
+        """최근 8주치 '여기서 씻었어요' 기록을 만든다.
+
+        이미 기록이 있으면 건너뛴다. 여러 번 실행해도 기록이 부풀지 않게 하기 위해서다.
+        """
+        if reset:
+            deleted, _ = Usage.objects.all().delete()
+            if deleted:
+                self.stdout.write(self.style.WARNING(f'기존 사용 기록 {deleted}건 삭제'))
+        elif Usage.objects.exists():
+            self.stdout.write('사용 기록이 이미 있어 건너뜁니다 (--reset으로 다시 생성)')
+            return
+
+        locations = {
+            location.building_name: location
+            for location in Location.objects.filter(building_name__in=SEED_USAGE_WEIGHTS)
+        }
+        if not locations:
+            self.stdout.write(self.style.WARNING('사용 기록을 붙일 위치가 없어 건너뜁니다'))
+            return
+
+        names = list(locations)
+        weights = [SEED_USAGE_WEIGHTS[name] for name in names]
+
+        rng = random.Random(SEED_USAGE_RANDOM_SEED)
+        now = timezone.localtime()
+        this_monday = now.date() - timedelta(days=now.date().weekday())
+
+        records = []
+        for week_offset in range(SEED_USAGE_WEEKS):
+            monday = this_monday - timedelta(weeks=week_offset)
+            count = rng.randint(*SEED_USAGE_PER_WEEK)
+
+            # 이번 주는 아직 다 지나지 않았다. 지나간 요일까지만 쓰고 횟수도 그만큼 줄인다.
+            # 이렇게 해야 '이번 달 n회'가 0으로 비지 않으면서, 지난 주들보다
+            # 부자연스럽게 빽빽해지지도 않는다.
+            last_weekday = now.weekday() if week_offset == 0 else 6
+            if week_offset == 0:
+                count = max(1, round(count * (last_weekday + 1) / 7))
+
+            weekday_pool = list(range(last_weekday + 1))
+            weekday_weights = SEED_USAGE_WEEKDAY_WEIGHTS[:last_weekday + 1]
+
+            for _ in range(count):
+                weekday = rng.choices(weekday_pool, weights=weekday_weights)[0]
+                start, end, _weight = rng.choices(
+                    SEED_USAGE_HOUR_WEIGHTS,
+                    weights=[item[2] for item in SEED_USAGE_HOUR_WEIGHTS],
+                )[0]
+
+                used_at = timezone.make_aware(datetime.combine(
+                    monday + timedelta(days=weekday),
+                    time(hour=rng.randrange(start, end), minute=rng.randrange(0, 60)),
+                ))
+
+                # 오늘치는 아직 오지 않은 시각일 수 있다. 미래 기록은 만들지 않는다.
+                if used_at > now:
+                    continue
+
+                name = rng.choices(names, weights=weights)[0]
+                note = rng.choices(
+                    [text for text, _ in SEED_USAGE_NOTES],
+                    weights=[weight for _, weight in SEED_USAGE_NOTES],
+                )[0]
+                records.append(Usage(location=locations[name], used_at=used_at, note=note))
+
+        Usage.objects.bulk_create(records)
+        self.stdout.write(f'사용 기록 {len(records)}건 생성 ({len(locations)}곳)')
 
     def build_seed_data(self):
         """이 파일의 시드에 로컬 전용 데이터가 있으면 합쳐서 돌려준다."""
