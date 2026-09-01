@@ -1,6 +1,9 @@
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Location, Report, Review
+from .models import Location, Report, Review, Usage
 from .moderation import contains_banned_words
 
 
@@ -112,3 +115,39 @@ class ReliabilitySerializer(serializers.Serializer):
 
     score = serializers.ChoiceField(choices=['high', 'medium', 'low'])
     summary = serializers.CharField()
+
+
+# 너무 오래된 기록은 습관 통계에 의미가 없고, 오타로 연도를 잘못 넣은 경우를 걸러준다.
+MAX_USAGE_BACKDATE_DAYS = 365
+
+# 기기 시계가 서버보다 조금 빠를 수 있어 미래 판정에 여유를 둔다.
+USAGE_FUTURE_TOLERANCE = timedelta(minutes=5)
+
+
+class UsageSerializer(serializers.ModelSerializer):
+    """'여기서 씻었어요' 기록.
+
+    used_at은 생략하면 지금 시각이 된다. 컵을 씻고 한참 뒤에 기록하는 경우가 있어
+    지나간 날짜·시간도 직접 넣을 수 있게 열어둔다.
+    """
+
+    location_name = serializers.CharField(source='location.building_name', read_only=True)
+
+    class Meta:
+        model = Usage
+        fields = ('id', 'location', 'location_name', 'used_at', 'note')
+        read_only_fields = ('id', 'location', 'location_name')
+
+    def validate_note(self, value):
+        # 리뷰·신고와 같은 기준으로 거른다. 개인 기록이라도 화면에 그대로 나오는 값이다.
+        if contains_banned_words(value):
+            raise serializers.ValidationError('부적절한 표현이 포함되어 있어 등록할 수 없습니다.')
+        return value.strip()
+
+    def validate_used_at(self, value):
+        now = timezone.now()
+        if value > now + USAGE_FUTURE_TOLERANCE:
+            raise serializers.ValidationError('아직 오지 않은 시각은 기록할 수 없습니다.')
+        if value < now - timedelta(days=MAX_USAGE_BACKDATE_DAYS):
+            raise serializers.ValidationError('1년보다 오래된 기록은 남길 수 없습니다.')
+        return value

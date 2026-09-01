@@ -5,7 +5,11 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-load_dotenv()
+# override=True로 두는 이유:
+# runserver 오토리로드는 자식 프로세스만 다시 띄우고, 자식은 부모의 환경변수를 물려받는다.
+# 기본값(override=False)이면 .env를 고쳐도 부모가 띄워질 때의 옛 값이 계속 이긴다.
+# 실제로 GEMINI_MODEL이 옛 모델로 굳어 한도 초과가 반복된 적이 있다.
+load_dotenv(override=True)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-dev-only-key")

@@ -5,6 +5,9 @@ import type {
   NewReviewInput,
   ReliabilityReport,
   Review,
+  Usage,
+  UsageCreated,
+  UsageReport,
   WashLocation,
   WashLocationDetail,
 } from '@/types';
@@ -73,6 +76,50 @@ export async function createReview(locationId: number, input: NewReviewInput): P
 /** POST /api/locations/{id}/report/ */
 export async function createReport(locationId: number, reason: string): Promise<void> {
   await client.post(`/locations/${locationId}/report/`, { reason });
+}
+
+/**
+ * POST /api/locations/{id}/usages/ — '여기서 씻었어요' 기록을 남긴다.
+ *
+ * usedAt을 주면 지나간 시각으로, 생략하면 서버가 지금 시각으로 잡는다.
+ * note는 사용자가 직접 적은 상황이라 비어 있을 수 있다.
+ */
+export async function recordUsage(
+  locationId: number,
+  input: { usedAt?: Date; note?: string } = {},
+): Promise<UsageCreated> {
+  const { data } = await client.post<UsageCreated>(`/locations/${locationId}/usages/`, {
+    ...(input.usedAt ? { used_at: input.usedAt.toISOString() } : {}),
+    ...(input.note ? { note: input.note } : {}),
+  });
+  return data;
+}
+
+/** GET /api/usages/notes/ — 전에 직접 적었던 상황 문구 (다시 쓰기 쉽게) */
+export async function fetchUsageNotes(): Promise<string[]> {
+  const { data } = await client.get<string[]>('/usages/notes/');
+  return data;
+}
+
+/** DELETE /api/usages/{id}/ — 잘못 남긴 기록을 되돌린다. */
+export async function deleteUsage(usageId: number): Promise<void> {
+  await client.delete(`/usages/${usageId}/`);
+}
+
+/** GET /api/usages/ — 최근 기록 목록 (되돌리기용) */
+export async function fetchUsages(): Promise<Usage[]> {
+  const { data } = await client.get<Usage[]>('/usages/');
+  return data;
+}
+
+/**
+ * GET /api/me/report/ — 내 사용 기록으로 만든 개인 리포트
+ *
+ * 신뢰도 요약과 마찬가지로 Gemini 호출이 들어가서 오래 걸릴 수 있다.
+ */
+export async function fetchUsageReport(): Promise<UsageReport> {
+  const { data } = await client.get<UsageReport>('/me/report/', { timeout: 60000 });
+  return data;
 }
 
 function guessFileName(uri: string): string {
