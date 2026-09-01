@@ -145,8 +145,8 @@ export default function MapScreen() {
       <SafeAreaView style={styles.footer} pointerEvents="box-none" edges={['bottom']}>
         <View style={styles.legend}>
           <LegendDot color={MarkerColors.confirmed} label="확인됨" />
-          <LegendDot color={MarkerColors.user} label="사용자 등록" />
           <LegendDot color={MarkerColors.reviewing} label="검토중" />
+          <LegendDot color={MarkerColors.user} label="사용자 등록" />
         </View>
 
         <Pressable
@@ -222,15 +222,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   legend: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    gap: Spacing.three,
+    flexDirection: 'column',
+    gap: Spacing.one,
     backgroundColor: 'rgba(255,255,255,0.94)',
-    borderRadius: 999,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    borderRadius: 16,
+    padding: Spacing.two,
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
   legendLabel: { fontSize: 12, color: '#374151', fontWeight: '600' },
   fab: {
