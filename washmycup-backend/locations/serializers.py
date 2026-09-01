@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import Location, Report, Review
+from .moderation import contains_banned_words
 
 
 class ReviewSerializer(serializers.ModelSerializer):
@@ -16,6 +17,11 @@ class ReviewSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('tags의 각 항목은 문자열이어야 합니다.')
         return value
 
+    def validate_free_text(self, value):
+        if contains_banned_words(value):
+            raise serializers.ValidationError('부적절한 표현이 포함되어 있어 등록할 수 없습니다.')
+        return value
+
     def validate(self, attrs):
         tags = attrs.get('tags') or []
         free_text = (attrs.get('free_text') or '').strip()
@@ -29,6 +35,11 @@ class ReportSerializer(serializers.ModelSerializer):
         model = Report
         fields = ('id', 'location', 'reason', 'status', 'created_at')
         read_only_fields = ('id', 'location', 'status', 'created_at')
+
+    def validate_reason(self, value):
+        if contains_banned_words(value):
+            raise serializers.ValidationError('부적절한 표현이 포함되어 있어 등록할 수 없습니다.')
+        return value
 
 
 class LocationListSerializer(serializers.ModelSerializer):
@@ -69,6 +80,16 @@ class LocationCreateSerializer(serializers.ModelSerializer):
             'photo': {'required': True},
             'detail_text': {'required': True, 'allow_blank': False},
         }
+
+    def validate_building_name(self, value):
+        if contains_banned_words(value):
+            raise serializers.ValidationError('부적절한 표현이 포함되어 있어 등록할 수 없습니다.')
+        return value
+
+    def validate_detail_text(self, value):
+        if contains_banned_words(value):
+            raise serializers.ValidationError('부적절한 표현이 포함되어 있어 등록할 수 없습니다.')
+        return value
 
     def validate_lat(self, value):
         if not -90 <= value <= 90:

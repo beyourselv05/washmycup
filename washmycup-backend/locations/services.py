@@ -23,8 +23,15 @@ logging.getLogger('google_genai.models').setLevel(logging.ERROR)
 # 무료 한도(하루 단위)를 아끼려면 길수록 좋다.
 CACHE_TTL_SECONDS = 60 * 60 * 24 * 7
 
+# 응답 형태가 바뀌면 올릴 것. 옛 형식 캐시를 무시하게 된다.
+CACHE_VERSION = 2
+
 # 호출 실패로 만든 폴백은 짧게만 담아둔다. 곧 다시 시도하게 만들기 위해서다.
 FALLBACK_CACHE_TTL_SECONDS = 60
+
+# 항목 점수는 리뷰에서 언급된 것만 받는다. 언급이 없는 항목까지 채우게 하면
+# 모델이 근거 없는 별점을 지어낸다.
+ASPECT_KEYS = ('세척력', '접근성', '대기시간', '세척 속도', '냄새 제거')
 
 PROMPT_TEMPLATE = """너는 텀블러 세척기 정보를 정리해주는 도우미야.
 
@@ -33,12 +40,24 @@ PROMPT_TEMPLATE = """너는 텀블러 세척기 정보를 정리해주는 도우
 
 {reviews}
 
-이 리뷰들을 종합해서 지금 이 세척기를 이용 가능할 확률이 높음/보통/낮음인지
-판단하고, 그 이유를 2-3문장으로 요약해줘.
+다음 세 가지를 뽑아줘.
+
+1. score: 지금 이 세척기를 이용 가능할 확률이 높음(high)/보통(medium)/낮음(low) 중 무엇인지.
+2. summary: 그렇게 판단한 이유를 2-3문장으로.
+3. aspects: 아래 항목 중 리뷰에서 실제로 언급된 것만 1~5점으로.
+   {aspect_keys}
+   언급이 없는 항목은 아예 넣지 마. 억지로 채우지 마.
+4. notes: 사용자가 알아두면 좋은 점을 0~2개, 각 한 문장으로.
+   예) "냄새 제거 관련 부정 리뷰가 반복적으로 나타났어요."
+       "커피를 마신 뒤라면 다른 곳도 함께 보세요."
+
 최신 리뷰에 더 무게를 두고, 리뷰에 없는 사실은 지어내지 마.
 
 반드시 아래 형태의 JSON만 출력해:
-{{"score": "high" | "medium" | "low", "summary": "한국어 2-3문장 요약"}}"""
+{{"score": "high" | "medium" | "low",
+  "summary": "한국어 2-3문장 요약",
+  "aspects": {{"항목명": 1~5 정수}},
+  "notes": ["한 문장", "한 문장"]}}"""
 
 
 def _format_reviews(reviews):
@@ -62,6 +81,8 @@ def _fallback_report(reviews):
             'score': 'medium',
             'summary': '아직 등록된 리뷰가 없어 이용 가능 여부를 판단하기 어렵습니다. '
                        '방문하신 뒤 첫 리뷰를 남겨주시면 다음 사용자에게 큰 도움이 됩니다.',
+            'aspects': {},
+            'notes': [],
         }
 
     up = sum(1 for review in reviews if review.type == Review.Type.UP)
@@ -80,6 +101,8 @@ def _fallback_report(reviews):
     return {
         'score': score,
         'summary': f'리뷰 {total}건 중 {up}건이 긍정 평가입니다. {tone} (AI 요약을 사용할 수 없어 리뷰 집계로 대신했습니다.)',
+        'aspects': {},
+        'notes': [],
     }
 
 
@@ -100,7 +123,35 @@ def _parse_gemini_json(text):
     if score not in ('high', 'medium', 'low') or not summary:
         raise ValueError(f'예상치 못한 응답 형태: {data!r}')
 
-    return {'score': score, 'summary': summary}
+    return {
+        'score': score,
+        'summary': summary,
+        'aspects': _clean_aspects(data.get('aspects')),
+        'notes': _clean_notes(data.get('notes')),
+    }
+
+
+def _clean_aspects(raw):
+    """모델이 정한 항목 중 우리가 정의한 것만, 1~5 범위로 걸러 받는다."""
+    if not isinstance(raw, dict):
+        return {}
+
+    cleaned = {}
+    for key in ASPECT_KEYS:
+        value = raw.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        score = int(round(value))
+        if 1 <= score <= 5:
+            cleaned[key] = score
+    return cleaned
+
+
+def _clean_notes(raw):
+    if not isinstance(raw, list):
+        return []
+    notes = [str(n).strip() for n in raw if str(n).strip()]
+    return notes[:2]
 
 
 def build_reliability_report(location, use_cache=True):
@@ -109,8 +160,10 @@ def build_reliability_report(location, use_cache=True):
     reviews = list(location.reviews.all()[:30])
 
     # 리뷰가 바뀌면 캐시 키도 바뀌도록 최신 리뷰 id와 개수를 섞는다.
+    # 응답에 필드를 추가/변경할 때는 CACHE_VERSION을 올린다. 그래야 옛 형식으로
+    # 저장된 캐시를 앱이 받아서 깨지는 일이 없다.
     latest_review_id = reviews[0].id if reviews else 0
-    cache_key = f'reliability:{location.id}:{len(reviews)}:{latest_review_id}'
+    cache_key = f'reliability:{CACHE_VERSION}:{location.id}:{len(reviews)}:{latest_review_id}'
 
     if use_cache:
         cached = cache.get(cache_key)
@@ -145,6 +198,7 @@ def _call_gemini(location, reviews):
     prompt = PROMPT_TEMPLATE.format(
         building_name=location.building_name,
         reviews=_format_reviews(reviews),
+        aspect_keys=' / '.join(ASPECT_KEYS),
     )
     response = client.models.generate_content(
         model=settings.GEMINI_MODEL,
@@ -152,3 +206,56 @@ def _call_gemini(location, reviews):
         config={'response_mime_type': 'application/json', 'temperature': 0.2},
     )
     return _parse_gemini_json(response.text)
+
+
+# ---------------------------------------------------------------------------
+# 등록 사진 검증
+# ---------------------------------------------------------------------------
+
+PHOTO_PROMPT = """이 사진이 텀블러 세척기 등록용으로 적절한지 판단해줘.
+
+적절한 사진: 텀블러 세척기, 컵 세척기, 세면대, 급수대, 싱크대처럼
+물로 무언가를 씻을 수 있는 설비가 찍힌 사진. 설비가 있는 주변 공간이
+넓게 찍힌 것도 괜찮다.
+
+부적절한 사진: 사람 얼굴이나 셀카, 음식, 반려동물, 스크린샷,
+풍경만 찍힌 사진처럼 세척 설비와 전혀 관련이 없는 것.
+
+애매하면 적절한 쪽으로 판단해. 잘못 막는 것보다 통과시키는 편이 낫다.
+
+반드시 아래 형태의 JSON만 출력해:
+{"ok": true 또는 false, "reason": "부적절할 때만 한 문장으로 이유"}"""
+
+# 사진 검증은 등록을 막을 수 있으므로 판단이 확실할 때만 거절한다.
+PHOTO_CHECK_ENABLED = True
+
+
+def verify_location_photo(image_bytes, mime_type):
+    """{'ok': bool, 'reason': str} 를 돌려준다.
+
+    호출에 실패하면 항상 통과시킨다. 한도 초과나 일시적 장애 때문에
+    사용자가 등록을 못 하는 상황을 만들지 않기 위해서다.
+    """
+    if not (PHOTO_CHECK_ENABLED and settings.GEMINI_API_KEY and image_bytes):
+        return {'ok': True, 'reason': ''}
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type or 'image/jpeg'),
+                PHOTO_PROMPT,
+            ],
+            config={'response_mime_type': 'application/json', 'temperature': 0},
+        )
+        data = json.loads((response.text or '').strip())
+        ok = bool(data.get('ok', True))
+        reason = str(data.get('reason', '')).strip()
+        return {'ok': ok, 'reason': reason if not ok else ''}
+    except Exception:
+        logger.exception('사진 검증 실패 — 통과 처리합니다')
+        return {'ok': True, 'reason': ''}

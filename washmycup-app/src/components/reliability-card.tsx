@@ -36,6 +36,10 @@ export function ReliabilityCard({ report, isLoading, error, onRetry }: Reliabili
   }
 
   const tone = ReliabilityStyles[report.score];
+  // 리뷰에서 언급된 항목만 내려오므로 개수가 매번 다르다.
+  // 응답에 아예 없을 수도 있어(옛 캐시 등) 기본값을 둔다. 없다고 화면이 죽으면 안 된다.
+  const aspects = Object.entries(report.aspects ?? {});
+  const notes = report.notes ?? [];
 
   return (
     <View style={[styles.card, { backgroundColor: tone.background }]}>
@@ -44,6 +48,30 @@ export function ReliabilityCard({ report, isLoading, error, onRetry }: Reliabili
         {tone.emoji} {tone.label}
       </Text>
       <Text style={styles.summary}>{report.summary}</Text>
+
+      {aspects.length > 0 && (
+        <View style={styles.aspects}>
+          {aspects.map(([label, score]) => (
+            <View key={label} style={styles.aspectRow}>
+              <Text style={styles.aspectLabel}>{label}</Text>
+              <Text style={[styles.aspectStars, { color: tone.color }]}>
+                {'★'.repeat(score)}
+                <Text style={styles.aspectStarsEmpty}>{'★'.repeat(5 - score)}</Text>
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {notes.length > 0 && (
+        <View style={styles.notes}>
+          {notes.map((note) => (
+            <Text key={note} style={styles.note}>
+              · {note}
+            </Text>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -86,6 +114,23 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#374151',
   },
+  aspects: {
+    gap: Spacing.one,
+    paddingTop: Spacing.two,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.12)',
+  },
+  aspectRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  aspectLabel: { fontSize: 14, color: '#374151', width: 68 },
+  aspectStars: { fontSize: 15, letterSpacing: 1 },
+  aspectStarsEmpty: { color: 'rgba(0,0,0,0.15)' },
+  notes: {
+    gap: Spacing.one,
+    paddingTop: Spacing.two,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.12)',
+  },
+  note: { fontSize: 14, lineHeight: 20, color: '#374151' },
   loadingText: {
     fontSize: 14,
     color: Brand.muted,

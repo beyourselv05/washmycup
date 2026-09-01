@@ -1,5 +1,5 @@
 from django.db.models import Count, Q
-from rest_framework import mixins, status, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
@@ -12,7 +12,7 @@ from .serializers import (
     ReportSerializer,
     ReviewSerializer,
 )
-from .services import build_reliability_report
+from .services import build_reliability_report, verify_location_photo
 
 
 class LocationViewSet(mixins.ListModelMixin,
@@ -47,11 +47,34 @@ class LocationViewSet(mixins.ListModelMixin,
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        self.check_photo(serializer.validated_data.get('photo'))
         location = serializer.save()
         # 응답은 목록과 같은 형태로 맞춰, 앱이 그대로 지도에 마커를 추가할 수 있게 한다.
         location = self.get_queryset().get(pk=location.pk)
         output = LocationListSerializer(location, context=self.get_serializer_context())
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+    def check_photo(self, photo):
+        """세척 설비와 무관한 사진이면 등록을 막는다.
+
+        판단이 확실할 때만 거절하고, 검증 자체가 실패하면 통과시킨다.
+        (services.verify_location_photo 참고)
+        """
+        if not photo:
+            return
+
+        photo.seek(0)
+        image_bytes = photo.read()
+        photo.seek(0)  # 이어서 저장해야 하므로 스트림을 되돌려 둔다.
+
+        result = verify_location_photo(image_bytes, getattr(photo, 'content_type', None))
+        if result['ok']:
+            return
+
+        reason = result['reason'] or '세척 설비가 보이지 않습니다.'
+        raise serializers.ValidationError({
+            'photo': [f'{reason} 세척기가 나온 사진으로 다시 올려주세요.'],
+        })
 
     @action(detail=True, methods=['get', 'post'], url_path='reviews')
     def reviews(self, request, pk=None):

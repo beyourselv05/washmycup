@@ -40,6 +40,13 @@ export interface WashLocationDetail extends WashLocation {
 export interface ReliabilityReport {
   score: ReliabilityScore;
   summary: string;
+  /**
+   * 리뷰에서 실제로 언급된 항목만 담긴다. 언급이 없으면 아예 빠진다.
+   * 옛 버전 백엔드나 캐시된 응답에는 이 필드가 없을 수 있어 optional로 둔다.
+   */
+  aspects?: Record<string, number>;
+  /** 사용자가 알아두면 좋은 점. 없거나 빈 배열일 수 있다. */
+  notes?: string[];
 }
 
 /** 위치 등록 폼에서 서버로 보내는 값. */
