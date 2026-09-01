@@ -63,3 +63,29 @@ export const Spacing = {
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
+
+/** CupPit 브랜드 색상. */
+export const Brand = {
+  primary: '#0E7C66',
+  primaryDark: '#0A5A4A',
+  primarySoft: '#E3F2EE',
+  accent: '#F2A93B',
+  danger: '#D24B3E',
+  dangerSoft: '#FBE9E7',
+  border: '#E3E5E8',
+  muted: '#6B7280',
+} as const;
+
+/** 지도 마커 색상: 확인된 곳은 파란색, 사용자 등록은 초록색, 검토중은 주황색. */
+export const MarkerColors = {
+  confirmed: '#2B7FFF',
+  user: '#18A957',
+  reviewing: '#F2A93B',
+} as const;
+
+/** AI 신뢰도 점수별 표시 색상과 라벨. */
+export const ReliabilityStyles = {
+  high: { color: '#18A957', background: '#E7F7EE', label: '이용 가능성 높음', emoji: '🟢' },
+  medium: { color: '#C77700', background: '#FDF3E2', label: '이용 가능성 보통', emoji: '🟡' },
+  low: { color: '#D24B3E', background: '#FBE9E7', label: '이용 가능성 낮음', emoji: '🔴' },
+} as const;

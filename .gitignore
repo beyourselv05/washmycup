@@ -3,8 +3,16 @@ washmycup-backend/venv/
 washmycup-backend/.env
 washmycup-backend/db.sqlite3
 washmycup-backend/media/
-washmycup-backend/__pycache__/
+# 출처 확인이 끝나지 않은 외부 매장 데이터 (각자 로컬에만 보관)
+washmycup-backend/seed_data_local.json
+
+# python (하위 디렉토리 전부)
+__pycache__/
+*.py[cod]
 
 # frontend
 washmycup-app/node_modules/
 washmycup-app/.env
+
+# macOS
+.DS_Store

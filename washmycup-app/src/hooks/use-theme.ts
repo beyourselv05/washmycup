@@ -8,7 +8,6 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export function useTheme() {
   const scheme = useColorScheme();
-  const theme = scheme === 'unspecified' ? 'light' : scheme;
-
-  return Colors[theme];
+  // 색상 모드를 못 읽는 경우(null/undefined)가 있어 밝은 테마를 기본으로 쓴다.
+  return Colors[scheme ?? 'light'];
 }

@@ -1,14 +1,20 @@
 {
   "expo": {
-    "name": "washmycup-app",
-    "slug": "washmycup-app",
+    "name": "CupPit",
+    "slug": "cuppit",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "washmycupapp",
-    "userInterfaceStyle": "automatic",
+    "scheme": "cuppit",
+    "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "가까운 텀블러 세척기를 지도에 표시하고, 새 위치를 등록할 때 현재 위치를 사용합니다.",
+        "NSCameraUsageDescription": "세척기 위치를 등록할 때 사진을 촬영합니다.",
+        "NSPhotoLibraryUsageDescription": "세척기 사진을 앨범에서 선택해 등록합니다."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +23,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "CAMERA"]
     },
     "web": {
       "output": "static",
@@ -28,9 +35,22 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#0E7C66",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "세척기 사진을 앨범에서 선택해 등록합니다.",
+          "cameraPermission": "세척기 위치를 등록할 때 사진을 촬영합니다."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "가까운 텀블러 세척기를 지도에 표시합니다."
         }
       ]
     ],

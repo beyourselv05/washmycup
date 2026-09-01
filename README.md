@@ -46,7 +46,7 @@ LG전자의 무료 세척기 마이컵(myCup)이 이미 설치되어 있지만:
 
 **Backend**: Django, Django REST Framework, SQLite, django-cors-headers
 
-**AI**: Google Gemini 2.5 Flash (리뷰 요약 · 신뢰도 판단)
+**AI**: Google Gemini 3.6 Flash (리뷰 요약 · 신뢰도 판단)
 
 ---
 
@@ -56,7 +56,7 @@ LG전자의 무료 세척기 마이컵(myCup)이 이미 설치되어 있지만:
 [Expo 앱] --REST API--> [Django/DRF] --읽기/쓰기--> [SQLite DB]
                               │                          ↑
                               │                     [Django Admin]
-                              └──온디맨드 호출──> [Gemini 2.5 Flash]
+                              └──온디맨드 호출──> [Gemini 3.6 Flash]
 ```
 
 리뷰 요약이 필요할 때만 Gemini API를 호출하는 온디맨드 구조. 신고 관리는 별도 화면 없이 Django Admin으로 처리.
@@ -84,40 +84,56 @@ LG전자의 무료 세척기 마이컵(myCup)이 이미 설치되어 있지만:
 - uv (파이썬 패키지 매니저)
 
 ### Backend
-
-bash
-
 ```bash
 cd washmycup-backend
 uv venv --python 3.12 venv
 source venv/bin/activate
 uv pip install -r requirements.txt
+cp .env.example .env              # GEMINI_API_KEY, DJANGO_SECRET_KEY 채우기
 python manage.py migrate
-python manage.py seed_locations   # 초기 시드 데이터
+python manage.py seed_locations --with-reviews   # 초기 시드 데이터 + 데모용 리뷰
+python manage.py createsuperuser  # Django Admin 계정
 python manage.py runserver
 ```
 
+- API: http://127.0.0.1:8000/api/locations/
+- 관리자(신고 목록): http://127.0.0.1:8000/admin/locations/report/
+
 ### Frontend
-
-bash
-
 ```bash
 cd washmycup-app
 npm install
 npx expo start
-# 터미널에서 i 입력 → iOS 시뮬레이터 실행
+# 폰의 Expo Go 앱으로 터미널의 QR 코드 스캔 (맥과 같은 와이파이)
 ```
+
+> **Expo SDK 54 고정** — 앱스토어/플레이스토어의 Expo Go가 SDK 54에 머물러 있어서,
+> 스토어에서 받은 Expo Go로 QR을 찍으려면 프로젝트도 SDK 54여야 합니다.
+> Expo Go의 제작사는 `650 Industries, Inc.`입니다. 설치 시 확인하세요.
+>
+> ⚠️ **모르는 사람이 보낸 Expo Go QR/링크는 절대 열지 마세요.** Expo Go는 QR이 가리키는
+> 코드를 그대로 실행하는 도구라, 이를 악용해 연락처·사진을 빼가는 피싱 수법이 있습니다.
+> 내 개발 서버가 띄운 QR을 찍는 것은 안전합니다.
+
+백엔드 주소는 Expo 개발 서버 주소에서 자동으로 유도되므로(`src/constants/config.ts`),
+시뮬레이터든 실물 폰이든 따로 고칠 필요가 없습니다.
 
 `.env` 파일에 `GEMINI_API_KEY` 설정 필요 (`.env.example` 참고)
 
 ---
 
-## 팀 구성
+## API 엔드포인트
 
-| 역할 | 인원 |
-| --- | --- |
-| 발표 | 2인 |
-| 개발 | 3인 |
+| Method | 경로 | 설명 |
+| --- | --- | --- |
+| GET | `/api/locations/` | 위치 목록 (삭제됨 제외, 👍/👎 집계 포함) |
+| POST | `/api/locations/` | 위치 등록 (multipart, 사진·상세설명 필수) |
+| GET | `/api/locations/{id}/` | 위치 상세 + 리뷰 목록 |
+| GET·POST | `/api/locations/{id}/reviews/` | 리뷰 조회 / 작성 |
+| GET | `/api/locations/{id}/reliability/` | AI 신뢰도 리포트 `{score, summary}` |
+| POST | `/api/locations/{id}/report/` | 신고 등록 (처리는 Django Admin) |
+
+신고가 접수되면 해당 위치는 `reviewing` 상태로 바뀌고, 관리자가 Admin에서 `removed`로 바꾸면 목록 API에서 사라진다.
 
 ---
 
