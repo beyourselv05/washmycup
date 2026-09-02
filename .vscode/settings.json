@@ -1,3 +1,7 @@
 {
-    "python-envs.defaultEnvManager": "ms-python.python:system"
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "markdown.copyFiles.destination": {
+        "/README.md": "docs/images/"
+    },
+    "markdown.editor.filePaste.copyIntoWorkspace": "mediaFiles"
 }
