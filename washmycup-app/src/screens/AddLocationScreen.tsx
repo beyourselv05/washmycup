@@ -148,14 +148,6 @@ export default function AddLocationScreen() {
       Alert.alert('건물/장소명을 입력해주세요.');
       return;
     }
-    if (!detailText.trim()) {
-      Alert.alert('상세 위치 설명을 입력해주세요.', '예: 1층 픽업대 옆에 있어요.');
-      return;
-    }
-    if (!photoUri) {
-      Alert.alert('사진은 필수입니다.', '세척기와 주변이 함께 보이는 사진을 한 장 등록해주세요.');
-      return;
-    }
 
     setIsSubmitting(true);
     try {
@@ -232,14 +224,14 @@ export default function AddLocationScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>4. 사진 (필수)</Text>
+          <Text style={styles.label}>4. 사진 (선택)</Text>
           {/*
             세척기만 확대해 찍은 사진은 '있다'는 것만 알려줄 뿐, 정작 찾아갈 때 도움이 안 된다.
             주변이 함께 나와야 다음 사람이 그 자리를 찾는다.
           */}
           <Text style={styles.help}>
             세척기와 주변이 함께 보이게 찍어주세요. 옆에 있는 기둥·간판·출입구가 같이 나오면
-            다른 사람이 찾기 훨씬 쉬워요.
+            다른 사람이 찾기 훨씬 쉬워요. 지금 찍기 어렵다면 비워두셔도 됩니다.
           </Text>
           {photoUri ? (
             <Pressable onPress={choosePhotoSource}>
@@ -254,7 +246,10 @@ export default function AddLocationScreen() {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>5. 상세 위치 설명</Text>
+          <Text style={styles.label}>5. 상세 위치 설명 (선택)</Text>
+          <Text style={styles.help}>
+            적어두면 다음 사람이 찾기 쉬워요. 사진으로 충분하다면 비워두셔도 됩니다.
+          </Text>
           <TextInput
             value={detailText}
             onChangeText={setDetailText}

@@ -79,9 +79,13 @@ class LocationCreateSerializer(serializers.ModelSerializer):
             'source', 'status', 'created_at',
         )
         read_only_fields = ('id', 'source', 'status', 'created_at')
+        # 사진과 상세 설명은 둘 다 선택. 등록 문턱을 낮추는 쪽을 택했다.
+        # 대신 사용자 등록은 항상 '운영진 확인 전' 상태로 들어가고(create 참고),
+        # 지도에서 노란 마커와 주의 안내로 구분되므로 검증 없이 신뢰되지는 않는다.
+        # 사진이 있으면 AI 검증을 거치고, 없으면 그 단계를 건너뛴다.
         extra_kwargs = {
-            'photo': {'required': True},
-            'detail_text': {'required': True, 'allow_blank': False},
+            'photo': {'required': False, 'allow_null': True},
+            'detail_text': {'required': False, 'allow_blank': True},
         }
 
     def validate_building_name(self, value):

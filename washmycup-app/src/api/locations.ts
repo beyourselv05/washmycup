@@ -55,11 +55,15 @@ export async function createLocation(input: NewLocationInput): Promise<WashLocat
   form.append('building_name', input.building_name);
   form.append('address', input.address);
   form.append('detail_text', input.detail_text);
-  form.append('photo', {
-    uri: input.photoUri,
-    name: guessFileName(input.photoUri),
-    type: guessMimeType(input.photoUri),
-  } as unknown as Blob);
+
+  // 사진은 선택이다. 없을 때 빈 값을 보내면 서버가 파일로 파싱하려다 실패하므로 아예 뺀다.
+  if (input.photoUri) {
+    form.append('photo', {
+      uri: input.photoUri,
+      name: guessFileName(input.photoUri),
+      type: guessMimeType(input.photoUri),
+    } as unknown as Blob);
+  }
 
   const { data } = await client.post<WashLocation>('/locations/', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
