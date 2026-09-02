@@ -19,11 +19,22 @@ import { ReviewItem } from '@/components/review-item';
 import { Brand, Spacing } from '@/constants/theme';
 import type { ReliabilityReport, WashLocationDetail } from '@/types';
 
+// 백엔드 Location.Status와 같은 값이다. 문구는 앱에서 읽기 좋게 다듬었다.
+// 건물명 위에 한 줄로 들어가는 자리라 짧게 유지한다.
 const STATUS_LABELS: Record<string, string> = {
   confirmed: '✅ 확인된 위치',
-  unconfirmed: '⚠️ 아직 확인되지 않은 위치',
-  reviewing: '🔍 신고 접수로 검토 중',
-  removed: '삭제된 위치',
+  unconfirmed: '⚠️ 미확인 위치',
+  reviewing: '🔍 신고 검토 중',
+  removed: '숨김 처리된 위치',
+};
+
+// 짧은 라벨만으로는 '그래서 어쩌라는 건지'가 안 와닿는 상태에만 설명을 덧붙인다.
+// 확인된 위치는 굳이 설명할 게 없어 넣지 않는다.
+const STATUS_NOTES: Record<string, string> = {
+  unconfirmed:
+    '아직 운영진이 확인하지 않은 위치입니다. 실제로 세척기가 없거나 정보가 다를 수 있으니 참고해주세요.',
+  reviewing:
+    '문제가 있다는 신고가 접수되어 확인 중입니다. 방문 전에 아래 리뷰를 함께 살펴봐주세요.',
 };
 
 export default function LocationDetailScreen() {
@@ -177,14 +188,22 @@ export default function LocationDetailScreen() {
       )}
 
       <View style={styles.section}>
+        <Text style={styles.status}>{STATUS_LABELS[location.status] ?? location.status}</Text>
         <Text style={styles.buildingName}>{location.building_name}</Text>
         {location.address.length > 0 && <Text style={styles.address}>{location.address}</Text>}
-        <Text style={styles.status}>{STATUS_LABELS[location.status] ?? location.status}</Text>
-        <Text style={styles.detailText}>{location.detail_text}</Text>
+        {location.detail_text.length > 0 && (
+          <Text style={styles.detailText}>{location.detail_text}</Text>
+        )}
         <Text style={styles.counts}>
           👍 {location.up_count} · 👎 {location.down_count}
         </Text>
       </View>
+
+      {STATUS_NOTES[location.status] && (
+        <View style={styles.statusNote}>
+          <Text style={styles.statusNoteText}>{STATUS_NOTES[location.status]}</Text>
+        </View>
+      )}
 
       <ReliabilityCard
         report={report}
@@ -193,9 +212,15 @@ export default function LocationDetailScreen() {
         onRetry={loadReliability}
       />
 
+      <PrimaryButton
+        label="🫧 여기서 씻었어요"
+        onPress={() => router.push(`/record/${location.id}`)}
+      />
+
       <View style={styles.actions}>
         <PrimaryButton
           label="리뷰 작성"
+          variant="secondary"
           onPress={() => router.push(`/review/${location.id}`)}
           style={styles.actionButton}
         />
@@ -233,8 +258,15 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.two },
   buildingName: { fontSize: 24, fontWeight: '800', color: '#111827' },
   address: { fontSize: 13, color: Brand.muted, lineHeight: 18, marginTop: -4 },
-  status: { fontSize: 14, fontWeight: '600', color: Brand.muted },
-  detailText: { fontSize: 16, lineHeight: 24, color: '#374151' },
+  status: { fontSize: 14, fontWeight: '600', color: Brand.muted, marginBottom: -4 },
+  statusNote: {
+    backgroundColor: '#FDF3E2',
+    borderRadius: 12,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  statusNoteText: { fontSize: 13, lineHeight: 20, color: '#8A5A00' },
+  detailText: { fontSize: 16, lineHeight: 24, fontWeight: '600', color: '#111827', marginVertical: Spacing.one },
   counts: { fontSize: 15, color: '#374151', fontWeight: '600' },
   actions: { flexDirection: 'row', gap: Spacing.two },
   actionButton: { flex: 1 },

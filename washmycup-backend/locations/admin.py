@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
 
-from .models import Location, Report, Review
+from .models import Location, Report, Review, Usage
 
 
 class ReviewInline(admin.TabularInline):
@@ -26,6 +26,13 @@ class LocationAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at', 'photo_preview')
     inlines = [ReviewInline, ReportInline]
     actions = ['mark_removed', 'mark_confirmed']
+
+    def get_changeform_initial_data(self, request):
+        # Admin에서 새로 넣는 위치는 운영진이 직접 확인한 것이므로 출처와 상태를 미리 맞춰둔다.
+        return {
+            'source': Location.Source.ADMIN,
+            'status': Location.Status.CONFIRMED,
+        }
 
     @admin.display(description='리뷰 (👍/👎)')
     def review_summary(self, obj):
@@ -100,6 +107,20 @@ class ReportAdmin(admin.ModelAdmin):
     def mark_resolved(self, request, queryset):
         updated = queryset.update(status=Report.Status.RESOLVED)
         self.message_user(request, f'신고 {updated}건을 처리완료로 바꿨습니다.')
+
+
+@admin.register(Usage)
+class UsageAdmin(admin.ModelAdmin):
+    """개인 리포트의 원재료. 시연용 기록을 손으로 넣거나 지울 때 쓴다."""
+
+    list_display = ('location', 'used_at', 'note', 'created_at')
+    list_filter = ('used_at', 'location')
+    search_fields = ('location__building_name', 'note')
+    readonly_fields = ('created_at',)
+    date_hierarchy = 'used_at'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('location')
 
 
 admin.site.site_header = 'CupPit 관리자'

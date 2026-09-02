@@ -76,9 +76,9 @@ export const Brand = {
   muted: '#6B7280',
 } as const;
 
-/** 지도 마커 색상: 확인된 곳은 파란색, 사용자 등록은 초록색, 검토중은 주황색. */
+/** 지도 마커 색상: 출처가 기준이다. 공식 등록은 파란색, 사용자 등록은 초록색, 신고로 검토중이면 주황색. */
 export const MarkerColors = {
-  confirmed: '#2B7FFF',
+  official: '#2B7FFF',
   user: '#18A957',
   reviewing: '#F2A93B',
 } as const;

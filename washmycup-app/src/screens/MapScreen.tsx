@@ -16,11 +16,43 @@ import type { WashLocation } from '@/types';
  */
 const MAX_MARKERS = 120;
 
-/** 마커 색: 확인된 곳은 파란색, 사용자 등록은 초록색, 신고로 검토중이면 주황색. */
+/**
+ * 마커를 그리는 순서(겹칠 때 누가 위로 오는지).
+ *
+ * 목록이 최신순이라 그냥 두면 방금 등록한 위치가 제일 먼저 그려져 오래된 마커에 덮인다.
+ * 아직 확인 안 된 곳일수록 눈에 띄어야 하므로 위로 올린다.
+ */
+function markerZIndex(location: WashLocation): number {
+  if (location.status === 'unconfirmed' || location.status === 'reviewing') return 2;
+  if (location.source === 'user') return 1;
+  return 0;
+}
+
+/**
+ * 마커 색 규칙.
+ * 아직 믿고 갈 수 없는 곳(미확인·신고 검토중)은 먼저 노랑으로 걸러내고,
+ * 확인이 끝난 곳만 출처에 따라 파랑(공식)/초록(사용자 등록)으로 나눈다.
+ */
 function markerColor(location: WashLocation): string {
-  if (location.status === 'reviewing') return MarkerColors.reviewing;
+  if (location.status === 'unconfirmed' || location.status === 'reviewing') {
+    return MarkerColors.reviewing;
+  }
   if (location.source === 'user') return MarkerColors.user;
-  return MarkerColors.confirmed;
+  return MarkerColors.official;
+}
+
+/**
+ * 마커 말풍선에 넣을 한 줄 설명.
+ *
+ * iOS 기본 말풍선은 설명을 한 줄로 잘라내기 때문에, 줄바꿈을 쓰면 뒷부분이 통째로 가려진다.
+ * 그래서 여러 줄을 ' · '로 펴서 잇고, 지도에서 더 중요한 상세 안내('임직원 전용' 등)를
+ * 주소보다 앞에 둔다. 주소 전문은 상세 화면에서 볼 수 있다.
+ */
+function calloutText(location: WashLocation): string {
+  return [...location.detail_text.split('\n'), location.address]
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /** 지금 화면에 보이는 범위의 마커만, 화면 중심에 가까운 것부터 추린다. */
@@ -106,17 +138,27 @@ export default function MapScreen() {
             key={location.id}
             coordinate={{ latitude: location.lat, longitude: location.lng }}
             pinColor={markerColor(location)}
+            zIndex={markerZIndex(location)}
             title={`${location.status === 'unconfirmed' ? '⚠️ ' : ''}${location.building_name}`}
-            description={location.address || location.detail_text}
+            description={calloutText(location)}
             onCalloutPress={() => router.push(`/location/${location.id}`)}
           />
         ))}
       </MapView>
 
       <SafeAreaView style={styles.overlay} pointerEvents="box-none" edges={['top']}>
-        <View style={styles.header} pointerEvents="none">
-          <Text style={styles.title}>CupPit</Text>
-          <Text style={styles.subtitle}>가까운 텀블러 세척기를 찾아보세요</Text>
+        <View style={styles.header}>
+          <View pointerEvents="none">
+            <Text style={styles.title}>CupPit</Text>
+            <Text style={styles.subtitle}>가까운 텀블러 세척기를 찾아보세요</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="내 텀블러 기록"
+            onPress={() => router.push('/my-report')}
+            style={({ pressed }) => [styles.reportButton, pressed && styles.reportButtonPressed]}>
+            <Text style={styles.reportButtonText}>내 기록</Text>
+          </Pressable>
         </View>
 
         {isMock && (
@@ -144,7 +186,7 @@ export default function MapScreen() {
 
       <SafeAreaView style={styles.footer} pointerEvents="box-none" edges={['bottom']}>
         <View style={styles.legend}>
-          <LegendDot color={MarkerColors.confirmed} label="확인됨" />
+          <LegendDot color={MarkerColors.official} label="공식 등록" />
           <LegendDot color={MarkerColors.user} label="사용자 등록" />
           <LegendDot color={MarkerColors.reviewing} label="검토중" />
         </View>
@@ -181,6 +223,10 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
     backgroundColor: 'rgba(255,255,255,0.94)',
     borderRadius: 16,
     paddingHorizontal: Spacing.three,
@@ -195,6 +241,14 @@ const styles = StyleSheet.create({
       android: { elevation: 4 },
     }),
   },
+  reportButton: {
+    backgroundColor: Brand.primarySoft,
+    borderRadius: 999,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  reportButtonPressed: { opacity: 0.7 },
+  reportButtonText: { fontSize: 13, fontWeight: '800', color: Brand.primaryDark },
   title: { fontSize: 24, fontWeight: '800', color: Brand.primary },
   subtitle: { fontSize: 13, color: Brand.muted, marginTop: 2 },
   banner: {
@@ -222,15 +276,13 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   legend: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    gap: Spacing.three,
+    flexDirection: 'column',
+    gap: Spacing.one,
     backgroundColor: 'rgba(255,255,255,0.94)',
-    borderRadius: 999,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+    borderRadius: 16,
+    padding: Spacing.two,
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   legendDot: { width: 10, height: 10, borderRadius: 5 },
   legendLabel: { fontSize: 12, color: '#374151', fontWeight: '600' },
   fab: {

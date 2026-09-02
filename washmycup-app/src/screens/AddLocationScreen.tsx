@@ -136,7 +136,7 @@ export default function AddLocationScreen() {
 
   function choosePhotoSource() {
     // 시뮬레이터에는 카메라가 없어 앨범 선택이 기본 경로다.
-    Alert.alert('사진 추가', '세척기가 보이는 사진을 등록해주세요.', [
+    Alert.alert('사진 추가', '세척기와 주변이 함께 보이는 사진이 좋아요.', [
       { text: '사진 촬영', onPress: () => pickPhoto('camera') },
       { text: '앨범에서 선택', onPress: () => pickPhoto('library') },
       { text: '취소', style: 'cancel' },
@@ -153,7 +153,7 @@ export default function AddLocationScreen() {
       return;
     }
     if (!photoUri) {
-      Alert.alert('사진은 필수입니다.', '세척기가 보이는 사진을 한 장 등록해주세요.');
+      Alert.alert('사진은 필수입니다.', '세척기와 주변이 함께 보이는 사진을 한 장 등록해주세요.');
       return;
     }
 
@@ -199,7 +199,7 @@ export default function AddLocationScreen() {
             </MapView>
           </View>
           <Pressable onPress={useCurrentPosition} style={styles.linkButton}>
-            <Text style={styles.linkText}>📍 현재 위치 사용</Text>
+            <Text style={styles.linkText}>📍 현재 내 위치 사용</Text>
           </Pressable>
         </View>
 
@@ -233,6 +233,14 @@ export default function AddLocationScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>4. 사진 (필수)</Text>
+          {/*
+            세척기만 확대해 찍은 사진은 '있다'는 것만 알려줄 뿐, 정작 찾아갈 때 도움이 안 된다.
+            주변이 함께 나와야 다음 사람이 그 자리를 찾는다.
+          */}
+          <Text style={styles.help}>
+            세척기와 주변이 함께 보이게 찍어주세요. 옆에 있는 기둥·간판·출입구가 같이 나오면
+            다른 사람이 찾기 훨씬 쉬워요.
+          </Text>
           {photoUri ? (
             <Pressable onPress={choosePhotoSource}>
               <Image source={{ uri: photoUri }} style={styles.preview} contentFit="cover" />
