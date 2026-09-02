@@ -56,7 +56,8 @@ export interface NewLocationInput {
   building_name: string;
   address: string;
   detail_text: string;
-  photoUri: string;
+  /** 사진은 선택이라 없을 수 있다. */
+  photoUri?: string | null;
 }
 
 /** 리뷰 작성 폼에서 서버로 보내는 값. */
