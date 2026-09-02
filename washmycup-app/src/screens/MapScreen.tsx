@@ -187,8 +187,8 @@ export default function MapScreen() {
       <SafeAreaView style={styles.footer} pointerEvents="box-none" edges={['bottom']}>
         <View style={styles.legend}>
           <LegendDot color={MarkerColors.official} label="공식 등록" />
-          <LegendDot color={MarkerColors.user} label="사용자 등록" />
           <LegendDot color={MarkerColors.reviewing} label="검토중" />
+          <LegendDot color={MarkerColors.user} label="사용자 등록" />
         </View>
 
         <Pressable
