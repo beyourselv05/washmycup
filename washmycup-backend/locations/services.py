@@ -1,8 +1,11 @@
 """리뷰를 모아 '지금 이용 가능할 확률'을 요약하는 AI 신뢰도 리포트.
 
-Gemini는 /reliability 를 호출할 때만(온디맨드) 부른다. 상시로 도는 프로세스는 없다.
-API 키가 없거나 호출이 실패하면 규칙 기반 폴백으로 항상 응답을 만들어낸다.
-(무료 티어 하루 250회라 같은 결과는 캐시해서 재사용한다.)
+Gemini는 요청(request) 경로에서 절대 호출하지 않는다. 대신 백그라운드 워커
+(management command `update_reliability`)가 주기적으로 리뷰가 바뀐 위치만
+골라 재계산해서 Location.reliability_* 필드에 저장해두고, API는 그 필드를
+읽기만 한다 — 동시접속자가 많아도 Gemini 호출 수는 위치 개수 × (운영시간/주기)로
+고정되고, 응답 속도도 항상 DB 조회 수준으로 유지된다.
+API 키가 없거나 호출이 실패하면 규칙 기반 폴백으로 항상 결과를 만들어낸다.
 """
 
 import json
@@ -10,16 +13,13 @@ import logging
 import re
 
 from django.conf import settings
-from django.core.cache import cache
 
 from .models import Review
 
 logger = logging.getLogger(__name__)
 
-# SDK가 매 호출마다 남기는 안내 로그를 줄여 개발 서버 콘솔을 깨끗하게 유지한다.
+# SDK가 매 호출마다 남기는 안내 로그를 줄여 워커 콘솔을 깨끗하게 유지한다.
 logging.getLogger('google_genai.models').setLevel(logging.ERROR)
-
-CACHE_TTL_SECONDS = 60 * 10
 
 PROMPT_TEMPLATE = """너는 텀블러 세척기 정보를 정리해주는 도우미야.
 
@@ -98,31 +98,43 @@ def _parse_gemini_json(text):
     return {'score': score, 'summary': summary}
 
 
-def build_reliability_report(location, use_cache=True):
-    """{'score': 'high'|'medium'|'low', 'summary': str} 를 반환한다."""
+def compute_reliability_report(location):
+    """{'score': 'high'|'medium'|'low', 'summary': str} 를 새로 계산한다.
 
+    캐시를 쓰지 않고 항상 Gemini(또는 폴백)를 호출한다 — 백그라운드 워커가
+    "리뷰가 바뀐 위치만" 골라 이 함수를 부르는 걸 전제로 하기 때문에,
+    여기서 또 캐싱할 필요가 없다.
+    """
     reviews = list(location.reviews.all()[:30])
 
-    # 리뷰가 바뀌면 캐시 키도 바뀌도록 최신 리뷰 id와 개수를 섞는다.
-    latest_review_id = reviews[0].id if reviews else 0
-    cache_key = f'reliability:{location.id}:{len(reviews)}:{latest_review_id}'
-
-    if use_cache:
-        cached = cache.get(cache_key)
-        if cached:
-            return cached
-
     if not reviews or not settings.GEMINI_API_KEY:
-        report = _fallback_report(reviews)
-    else:
-        try:
-            report = _call_gemini(location, reviews)
-        except Exception:
-            logger.exception('Gemini 신뢰도 요약 실패 (location=%s)', location.id)
-            report = _fallback_report(reviews)
+        return _fallback_report(reviews)
 
-    cache.set(cache_key, report, CACHE_TTL_SECONDS)
-    return report
+    try:
+        return _call_gemini(location, reviews)
+    except Exception:
+        logger.exception('Gemini 신뢰도 요약 실패 (location=%s)', location.id)
+        return _fallback_report(reviews)
+
+
+def save_reliability_report(location, report):
+    """계산된 리포트를 Location 필드에 저장한다 (워커/초기화 공용)."""
+    from django.utils import timezone
+
+    location.reliability_score = report['score']
+    location.reliability_summary = report['summary']
+    location.reliability_updated_at = timezone.now()
+    location.save(update_fields=[
+        'reliability_score', 'reliability_summary', 'reliability_updated_at',
+    ])
+
+
+def initialize_reliability(location):
+    """위치 등록 직후, 워커가 아직 안 돌았을 때를 대비해 즉시 규칙 기반으로 채워둔다.
+
+    이 시점엔 리뷰가 없는 게 보통이라 Gemini를 부르지 않고 즉시 끝난다.
+    """
+    save_reliability_report(location, _fallback_report([]))
 
 
 def _call_gemini(location, reviews):

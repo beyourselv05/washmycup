@@ -99,6 +99,16 @@ python manage.py runserver
 - API: http://127.0.0.1:8000/api/locations/
 - 관리자(신고 목록): http://127.0.0.1:8000/admin/locations/report/
 
+**AI 신뢰도 리포트 워커** (별도 터미널에서 실행):
+```bash
+python manage.py update_reliability
+```
+60초마다 DB를 확인해서, 새 리뷰가 3개 이상 몰린 위치는 즉시, 아니면 리뷰가 생긴 지
+5분이 지난 위치를 재계산한다(기본값, `--poll-interval`/`--review-threshold`/`--min-interval`로 조정 가능).
+`/reliability/` 엔드포인트는 이 워커가 채워둔 값만 읽는다 — 요청 시점엔 Gemini를 호출하지 않아
+동시접속자가 많아도 응답이 느려지지 않는다. 데모 직전 강제로 한 번 갱신하려면
+`python manage.py update_reliability --once`.
+
 ### Frontend
 ```bash
 cd washmycup-app
