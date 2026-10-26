@@ -31,6 +31,21 @@ class Location(models.Model):
     )
     created_at = models.DateTimeField('등록일시', auto_now_add=True)
 
+    class ReliabilityScore(models.TextChoices):
+        HIGH = 'high', '높음'
+        MEDIUM = 'medium', '보통'
+        LOW = 'low', '낮음'
+
+    # 백그라운드 워커(update_reliability 명령어)가 주기적으로 채워두는 AI 신뢰도 리포트.
+    # 요청 시점엔 이 필드만 읽고, Gemini는 절대 호출하지 않는다.
+    reliability_score = models.CharField(
+        'AI 신뢰도', max_length=10, choices=ReliabilityScore.choices, blank=True,
+    )
+    reliability_summary = models.TextField('AI 신뢰도 요약', blank=True)
+    reliability_aspects = models.JSONField('AI 신뢰도 항목 점수', default=dict, blank=True)
+    reliability_notes = models.JSONField('AI 신뢰도 안내', default=list, blank=True)
+    reliability_updated_at = models.DateTimeField('AI 신뢰도 갱신일시', null=True, blank=True)
+
     class Meta:
         verbose_name = '세척기 위치'
         verbose_name_plural = '세척기 위치'

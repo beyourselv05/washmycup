@@ -97,10 +97,11 @@ react-native-maps, expo-image-picker, expo-location, @react-native-community/dat
 [Expo 앱] --REST API--> [Django/DRF] --읽기/쓰기--> [SQLite DB]
                               │                          ↑
                               │                     [Django Admin]
-                              └──온디맨드 호출──> [Gemini]
+                              └──워커/필요 시 호출──> [Gemini]
 ```
 
-필요할 때만 Gemini API를 호출하는 온디맨드 구조이고, 결과는 캐시해서 재사용한다.
+신뢰도 리포트는 백그라운드 워커가 미리 계산해 저장하고, 조회 API는 그 값을 즉시 읽는다.
+사진 검증과 사용 리포트 문구만 필요한 시점에 Gemini API를 호출하며, 결과는 캐시해서 재사용한다.
 API 키가 없거나 호출이 실패해도 규칙 기반 폴백으로 항상 응답이 나간다.
 신고 관리는 별도 화면 없이 Django Admin으로 처리.
 
@@ -146,6 +147,16 @@ python manage.py runserver
 
 - API: http://127.0.0.1:8000/api/locations/
 - 관리자(신고 목록): http://127.0.0.1:8000/admin/locations/report/
+
+**AI 신뢰도 리포트 워커** (별도 터미널에서 실행):
+```bash
+python manage.py update_reliability
+```
+60초마다 DB를 확인해서, 새 리뷰가 3개 이상 몰린 위치는 즉시, 아니면 리뷰가 생긴 지
+5분이 지난 위치를 재계산한다(기본값, `--poll-interval`/`--review-threshold`/`--min-interval`로 조정 가능).
+`/reliability/` 엔드포인트는 이 워커가 채워둔 값만 읽는다 — 요청 시점엔 Gemini를 호출하지 않아
+동시접속자가 많아도 응답이 느려지지 않는다. 데모 직전 강제로 한 번 갱신하려면
+`python manage.py update_reliability --once`.
 
 ### Frontend
 ```bash
