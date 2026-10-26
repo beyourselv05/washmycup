@@ -1,9 +1,15 @@
-"""Gemini를 호출하는 서비스 모듈.
+"""Gemini를 부르는 곳을 모아둔 모듈.
 
-- 신뢰도 리포트는 백그라운드 워커가 계산해 ``Location.reliability_*``에 저장한다.
-  조회 API는 저장된 값만 읽으므로 Gemini 호출이 요청 경로에 들어가지 않는다.
-- 사진 검증과 사용 리포트 문구는 요청 시 호출한다. 실패하면 각각 통과 또는 규칙 기반
-  폴백으로 처리한다.
+세 가지 용도로 쓴다.
+  - build_reliability_report: 리뷰를 모아 '지금 이용 가능할 확률'을 요약
+  - verify_location_photo:    등록 사진이 세척 설비인지 확인
+  - build_usage_report:       계산된 사용 통계에 응원 문구를 붙임
+
+모두 요청이 들어올 때만(온디맨드) 부른다. 상시로 도는 프로세스는 없다.
+API 키가 없거나 호출이 실패하면 규칙 기반 폴백으로 항상 응답을 만들어낸다.
+
+무료 티어 한도는 모델별로 하루 단위(예: 20회)라 넉넉하지 않다.
+그래서 결과는 캐시해두고 입력이 바뀔 때만 다시 부른다.
 """
 
 import json
@@ -17,11 +23,15 @@ from .models import Review
 
 logger = logging.getLogger(__name__)
 
-# SDK가 매 호출마다 남기는 안내 로그를 줄여 워커 콘솔을 깨끗하게 유지한다.
+# SDK가 매 호출마다 남기는 안내 로그를 줄여 개발 서버 콘솔을 깨끗하게 유지한다.
 logging.getLogger('google_genai.models').setLevel(logging.ERROR)
 
-# 사용 리포트는 입력이 바뀌면 캐시 키가 바뀌므로 오래 보관해도 안전하다.
+# 리뷰가 바뀌면 캐시 키 자체가 바뀌므로 오래 두어도 낡은 요약이 나오지 않는다.
+# 무료 한도(하루 단위)를 아끼려면 길수록 좋다.
 CACHE_TTL_SECONDS = 60 * 60 * 24 * 7
+
+# 응답 형태가 바뀌면 올릴 것. 옛 형식 캐시를 무시하게 된다.
+CACHE_VERSION = 2
 
 # 호출 실패로 만든 폴백은 짧게만 담아둔다. 곧 다시 시도하게 만들기 위해서다.
 FALLBACK_CACHE_TTL_SECONDS = 60
@@ -34,6 +44,7 @@ QUOTA_FALLBACK_CACHE_TTL_SECONDS = 60 * 10
 # 항목 점수는 리뷰에서 언급된 것만 받는다. 언급이 없는 항목까지 채우게 하면
 # 모델이 근거 없는 별점을 지어낸다.
 ASPECT_KEYS = ('세척력', '접근성', '대기시간', '세척 속도', '냄새 제거')
+
 PROMPT_TEMPLATE = """너는 텀블러 세척기 정보를 정리해주는 도우미야.
 
 아래는 '{building_name}'에 설치된 무료 텀블러 세척기에 대한 사용자 리뷰야.
@@ -164,46 +175,42 @@ def _clean_notes(raw):
     return notes[:2]
 
 
-def compute_reliability_report(location):
-    """{'score': 'high'|'medium'|'low', 'summary': str} 를 새로 계산한다.
+def build_reliability_report(location, use_cache=True):
+    """{'score': 'high'|'medium'|'low', 'summary': str} 를 반환한다."""
 
-    캐시를 쓰지 않고 항상 Gemini(또는 폴백)를 호출한다 — 백그라운드 워커가
-    "리뷰가 바뀐 위치만" 골라 이 함수를 부르는 걸 전제로 하기 때문에,
-    여기서 또 캐싱할 필요가 없다.
-    """
     reviews = list(location.reviews.all()[:30])
 
+    # 리뷰가 바뀌면 캐시 키도 바뀌도록 최신 리뷰 id와 개수를 섞는다.
+    # 응답에 필드를 추가/변경할 때는 CACHE_VERSION을 올린다. 그래야 옛 형식으로
+    # 저장된 캐시를 앱이 받아서 깨지는 일이 없다.
+    latest_review_id = reviews[0].id if reviews else 0
+    cache_key = f'reliability:{CACHE_VERSION}:{location.id}:{len(reviews)}:{latest_review_id}'
+
+    if use_cache:
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
     if not reviews or not settings.GEMINI_API_KEY:
-        return _fallback_report(reviews)
+        # 리뷰가 없거나 키가 없는 건 상태가 바뀌기 전까지 결과가 같으므로 그대로 캐시한다.
+        report = _fallback_report(reviews)
+        cache.set(cache_key, report, CACHE_TTL_SECONDS)
+        return report
 
     try:
-        return _call_gemini(location, reviews)
-    except Exception:
+        report = _call_gemini(location, reviews)
+    except Exception as error:
+        # 이 결과를 오래 캐시해두면 한도가 풀린 뒤에도 계속 폴백만 나오므로 짧게 담아둔다.
+        # 단, 한도 초과라면 바로 다시 불러도 실패하니 그때는 조금 더 길게 둔다.
         logger.exception('Gemini 신뢰도 요약 실패 (location=%s)', location.id)
-        return _fallback_report(reviews)
+        report = _fallback_report(reviews)
+        ttl = (QUOTA_FALLBACK_CACHE_TTL_SECONDS if _is_quota_error(error)
+               else FALLBACK_CACHE_TTL_SECONDS)
+        cache.set(cache_key, report, ttl)
+        return report
 
-
-def save_reliability_report(location, report):
-    """계산된 리포트를 Location 필드에 저장한다 (워커/초기화 공용)."""
-    from django.utils import timezone
-
-    location.reliability_score = report['score']
-    location.reliability_summary = report['summary']
-    location.reliability_aspects = report.get('aspects', {})
-    location.reliability_notes = report.get('notes', [])
-    location.reliability_updated_at = timezone.now()
-    location.save(update_fields=[
-        'reliability_score', 'reliability_summary', 'reliability_aspects',
-        'reliability_notes', 'reliability_updated_at',
-    ])
-
-
-def initialize_reliability(location):
-    """위치 등록 직후, 워커가 아직 안 돌았을 때를 대비해 즉시 규칙 기반으로 채워둔다.
-
-    이 시점엔 리뷰가 없는 게 보통이라 Gemini를 부르지 않고 즉시 끝난다.
-    """
-    save_reliability_report(location, _fallback_report([]))
+    cache.set(cache_key, report, CACHE_TTL_SECONDS)
+    return report
 
 
 def _call_gemini(location, reviews):
