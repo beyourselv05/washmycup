@@ -14,7 +14,7 @@ from .serializers import (
     ReviewSerializer,
     UsageSerializer,
 )
-from .services import build_usage_report, initialize_reliability, verify_location_photo
+from .services import build_reliability_report, build_usage_report, verify_location_photo
 from .stats import build_usage_stats
 
 
@@ -52,8 +52,6 @@ class LocationViewSet(mixins.ListModelMixin,
         serializer.is_valid(raise_exception=True)
         self.check_photo(serializer.validated_data.get('photo'))
         location = serializer.save()
-        # 백그라운드 워커가 돌기 전까지 reliability 필드가 비어있지 않도록 즉시 채워둔다.
-        initialize_reliability(location)
         # 응답은 목록과 같은 형태로 맞춰, 앱이 그대로 지도에 마커를 추가할 수 있게 한다.
         location = self.get_queryset().get(pk=location.pk)
         output = LocationListSerializer(location, context=self.get_serializer_context())
@@ -96,16 +94,10 @@ class LocationViewSet(mixins.ListModelMixin,
 
     @action(detail=True, methods=['get'], url_path='reliability')
     def reliability(self, request, pk=None):
-        # Gemini는 여기서 절대 호출하지 않는다 — 백그라운드 워커(update_reliability)가
-        # 미리 계산해둔 값을 읽기만 하므로 동시접속자가 많아도 응답이 항상 즉시 나온다.
         location = self.get_object()
-        return Response({
-            'score': location.reliability_score,
-            'summary': location.reliability_summary,
-            'aspects': location.reliability_aspects,
-            'notes': location.reliability_notes,
-            'updated_at': location.reliability_updated_at,
-        })
+        refresh = request.query_params.get('refresh') == '1'
+        report = build_reliability_report(location, use_cache=not refresh)
+        return Response(report)
 
     @action(detail=True, methods=['post'], url_path='report')
     def report(self, request, pk=None):
